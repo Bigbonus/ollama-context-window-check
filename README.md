@@ -226,3 +226,5 @@ would have been caught by one check.
 - Base model name, start/end timestamps, elapsed seconds, GPU name and library
   versions in every training record (learned by having 65 of 135 runs I can no
   longer attribute)
+Experiment data: https://doi.org/10.5281/zenodo.21983630
+Longer writeup, including the failures not covered here: (https://www.amazon.com/dp/B0HDPMNMTQ)
