@@ -27,6 +27,16 @@ measured boundary                   prompt_eval_count 4,046-4,050 passes,
 The model declares 40,960. It was being served roughly 4,096. Nothing in the
 model file and nothing in my environment asked for that.
 
+The server states the number itself — but only when it refuses:
+
+```
+request (7851 tokens) exceeds the available context size (4096 tokens),
+try increasing it
+```
+
+`"type": "exceed_context_size_error"`. That is the 4B rejecting a 44,426-character
+prompt. Given the same prompt, the 14B says nothing at all. It returns 200.
+
 **Success is the failure mode.** Same request, same prompt, three models:
 
 | Model | HTTP | What came back |
@@ -35,7 +45,9 @@ model file and nothing in my environment asked for that.
 | 9B\* | 400 | Rejected |
 | 14B | **200** | `prompt_eval_count` 2,050, wrong answer |
 
-(Why 2,050 rather than 4,096, I don't know. I'm reporting the number I measured.)
+(Why 2,050 rather than 4,096, I don't know. I'm reporting the number I measured.
+It is reproducible: the check script below, on an unrelated prompt, lands on
+2,050 as well.)
 
 \* Nemotron Nano 9B v2 — a different model family, used here only as a second
 inference target. The 4B and 14B are Qwen3.
@@ -140,11 +152,39 @@ truncation, so the test passes while the bug is still there.
 ## Check your own setup
 
 ```bash
-./check_context.sh qwen3:14b
+./check_context.sh qwen3:14b        # bash + curl + jq
+python check_context.py qwen3:14b   # standard library only, no jq
 ```
 
-Sends the same needle prompt twice — once with the server default, once with an
-explicit `num_ctx` — and compares `prompt_eval_count`.
+Both send the same needle prompt twice — once with the server default, once with
+an explicit `num_ctx` — and compare `prompt_eval_count`. The Python version is
+there because `jq` isn't present by default on Windows, which is where this was
+found.
+
+Output on a server carrying the small default, from the 14B — the silent case:
+
+```
+--- run 1: server default (no num_ctx)
+    HTTP status      : 200
+    prompt_eval_count: 2050
+    answer           : ACCESS
+    needle found     : NO
+
+--- run 2: explicit num_ctx=16384
+    HTTP status      : 200
+    prompt_eval_count: 7855
+    answer           : XJ7Q-4419-KTM
+    needle found     : yes
+
+===
+TRUNCATION DETECTED.
+  default  : 2050 prompt tokens evaluated
+  explicit : 7855 prompt tokens evaluated
+```
+
+Run 1 returned 200 and an answer. The answer is the word `ACCESS`, picked out of
+a log line near the end — the front of the prompt, where the code was, is gone.
+The 4B given the same prompt returns 400 and tells you why.
 
 #### Fixes, in increasing order of permanence
 
