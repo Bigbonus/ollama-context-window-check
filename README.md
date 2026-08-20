@@ -89,8 +89,8 @@ page, read it off the running server.
 **`ollama ps`** prints the applied context on builds that carry the column:
 
 ```
-NAME                       ID              SIZE      PROCESSOR    CONTEXT    UNTIL
-mythos-4b-champion:q4km    69bf8b840ba0    5.1 GB    100% GPU     16384      4 minutes from now
+NAME                    ID              SIZE      PROCESSOR    CONTEXT    UNTIL
+qwen3-4b-custom:q4km    69bf8b840ba0    5.1 GB    100% GPU     16384      4 minutes from now
 ```
 
 That 16384 is a value I set explicitly. With nothing specified you should
@@ -226,5 +226,10 @@ would have been caught by one check.
 - Base model name, start/end timestamps, elapsed seconds, GPU name and library
   versions in every training record (learned by having 65 of 135 runs I can no
   longer attribute)
-Experiment data: https://doi.org/10.5281/zenodo.21983630
-Longer writeup, including the failures not covered here: (https://www.amazon.com/dp/B0HDPMNMTQ)
+
+---
+
+## Data and further reading
+
+- Experiment data: https://doi.org/10.5281/zenodo.21983630
+- I wrote up the full set of experiments, including the failures not covered here, as a book: [Raising Your Own AI on a Home PC](https://www.amazon.com/dp/B0HDPMNMTQ)
