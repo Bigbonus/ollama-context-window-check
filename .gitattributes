@@ -1,0 +1,4 @@
+# Shell scripts must keep LF endings, or bash on Linux/macOS fails on \r.
+*.sh text eol=lf
+*.py text eol=lf
+*.md text

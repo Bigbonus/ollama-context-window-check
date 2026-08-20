@@ -36,8 +36,17 @@ def build_prompt() -> str:
     return "ACCESS CODE: %s\n" % NEEDLE + "\n".join(FILLER for _ in range(FILLER_LINES))
 
 
-def run(url: str, model: str, system: str, label: str, extra: dict) -> int | None:
-    """One call. Returns prompt_eval_count, or None if the request was refused."""
+CONTEXT_MARKERS = ("context size", "exceed_context_size", "context length")
+
+
+def run(url: str, model: str, system: str, label: str, extra: dict):
+    """One call. Returns (prompt_eval_count, state).
+
+    state is "ok", "overflow" (the server said the prompt exceeded its window),
+    or "failed" (anything else). Reporting an unrelated failure as truncation
+    would be the same class of mistake this repository is about, so the two are
+    kept apart.
+    """
     options = {"num_predict": 64, "temperature": 0}
     options.update(extra)
     body = {
@@ -59,10 +68,14 @@ def run(url: str, model: str, system: str, label: str, extra: dict) -> int | Non
         with urllib.request.urlopen(request, timeout=600) as response:
             status, data = response.status, json.load(response)
     except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", "replace")
         print("    HTTP status      : %d" % exc.code)
-        print("    response         : %s" % exc.read().decode("utf-8", "replace")[:200])
-        print("    verdict          : REJECTED (prompt exceeded the served window)\n")
-        return None
+        print("    response         : %s" % detail[:200])
+        if any(marker in detail.lower() for marker in CONTEXT_MARKERS):
+            print("    verdict          : REJECTED (prompt exceeded the served window)\n")
+            return None, "overflow"
+        print("    verdict          : REQUEST FAILED (not a context error - see above)\n")
+        return None, "failed"
     except urllib.error.URLError as exc:
         sys.exit("could not reach %s: %s" % (url, exc.reason))
 
@@ -72,7 +85,7 @@ def run(url: str, model: str, system: str, label: str, extra: dict) -> int | Non
     print("    prompt_eval_count: %s" % (count if count is not None else "n/a"))
     print("    answer           : %s" % (answer or "(empty)"))
     print("    needle found     : %s\n" % ("yes" if NEEDLE in answer else "NO"))
-    return count
+    return count, "ok"
 
 
 def main() -> int:
@@ -89,12 +102,16 @@ def main() -> int:
     print("needle: %s (first line of the system prompt)" % NEEDLE)
     print("system prompt: %d characters\n" % len(system))
 
-    default = run(url, model, system, "run 1: server default (no num_ctx)", {})
-    explicit = run(url, model, system,
-                   "run 2: explicit num_ctx=%d" % num_ctx, {"num_ctx": num_ctx})
+    default, state_default = run(
+        url, model, system, "run 1: server default (no num_ctx)", {})
+    explicit, state_explicit = run(
+        url, model, system, "run 2: explicit num_ctx=%d" % num_ctx, {"num_ctx": num_ctx})
 
     print("===")
-    if default is None and explicit is not None:
+    if "failed" in (state_default, state_explicit):
+        print("A request failed for a reason unrelated to context size. Nothing is")
+        print("proved either way - read the response above before concluding anything.")
+    elif state_default == "overflow" and state_explicit == "ok":
         print("Run 1 was rejected while run 2 succeeded with an explicit window.")
         print("Your server default is smaller than this prompt.")
     elif explicit is None:

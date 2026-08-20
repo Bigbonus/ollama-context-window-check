@@ -34,8 +34,8 @@ request (7851 tokens) exceeds the available context size (4096 tokens),
 try increasing it
 ```
 
-`"type": "exceed_context_size_error"`. That is the 4B rejecting a 44,426-character
-prompt. Given the same prompt, the 14B says nothing at all. It returns 200.
+`"type": "exceed_context_size_error"`. That is the 4B rejecting a 44 KB prompt.
+Given the same prompt, the 14B says nothing at all. It returns 200.
 
 **Success is the failure mode.** Same request, same prompt, three models:
 
@@ -149,17 +149,24 @@ Add `"num_ctx":16384` to `options` and it answers correctly.
 Put the needle on the **first** line, not the last. A needle at the end survives
 truncation, so the test passes while the bug is still there.
 
+On Windows, don't inline a prompt this size into the command as above: the
+command line caps out around 32 KB and you'll get a malformed request back
+rather than a truncated one. Put the body in a file and use `--data-binary @body.json`,
+or just run one of the scripts below, which do that already.
+
 ## Check your own setup
 
 ```bash
-./check_context.sh qwen3:14b        # bash + curl + jq
-python check_context.py qwen3:14b   # standard library only, no jq
+python check_context.py qwen3:14b     # standard library only, no dependencies
+bash check_context.sh qwen3:14b       # same test, needs curl and jq
 ```
 
 Both send the same needle prompt twice — once with the server default, once with
-an explicit `num_ctx` — and compare `prompt_eval_count`. The Python version is
-there because `jq` isn't present by default on Windows, which is where this was
-found.
+an explicit `num_ctx` — and compare `prompt_eval_count`. The Python one is listed
+first because it needs nothing installed; `jq` isn't present by default on
+Windows, which is where this was found. Invoke the shell one as `bash
+check_context.sh` rather than `./check_context.sh` if the execute bit didn't
+survive the trip.
 
 Output on a server carrying the small default, from the 14B — the silent case:
 
