@@ -73,10 +73,8 @@ versus built-locally, and I am reporting that as a correlation. I don't know the
 mechanism and I haven't read the source.
 
 (The window is 4,096 — `ollama ps` says so, and the models that refuse say so.
-So why does truncation leave 2,050, about half of it? I don't know. It is not a
-fluke: exactly 2,050 for two different stock models and for two prompts of
-different lengths and wording. I'm reporting the numbers I measured, both of
-them.)
+So why does truncation leave 2,050, about half of it? **This has an answer, and
+it isn't mine.** See below.)
 
 The 200 is the dangerous case. A successful response, correctly formed,
 containing a confident wrong answer, with nothing in it to say most of the
@@ -132,12 +130,38 @@ model declares   qwen3.context_length = 40,960           -> a fraction served
 
 Consistency, not proof of mechanism — I haven't read the source. And it accounts
 for only one of the two numbers: the window is 4,096, but the models that
-truncate rather than refuse evaluate 2,050 of the prompt, about half of the
-window they were given. The VRAM tier explains the 4,096. It doesn't explain the
-2,050.
+truncate rather than refuse evaluate 2,050. The VRAM tier explains the 4,096.
 
 The practical conclusion is the same either way: don't take the number from a
 page, read it off the running server.
+
+#### 2,050 is `num_ctx / 2 + 2`, and someone had already found it
+
+I filed the above upstream and had the answer within the hour, which is the
+argument for filing rather than blogging. It is
+[ollama/ollama#17427](https://github.com/ollama/ollama/issues/17427), reported
+in July on entirely different hardware:
+
+> the effective usable **prompt** token window is consistently and exactly
+> **half** the configured `num_ctx` (plus a small +2 constant)
+
+`4096 / 2 + 2 = 2050`. Exact. In that thread rick-github explains why: when the
+prompt exceeds the context buffer, the tokens are reduced to half the buffer
+rather than trimmed to fit it, and the server logs it as
+`limit=2050 keep=4`. spenceclark measured the same formula at several window
+sizes on a different model, and independently confirmed with a canary that the
+system prompt is what disappears.
+
+Two things follow. **Truncation is a cliff, not a gradient** — a prompt one
+token over a 4,096 window doesn't lose one token, it loses about 2,047. And
+**my "unexplained" number was already documented**; I hadn't found it because I
+didn't know what to search for. That is the ordinary case, and it is why the
+first thing to do with a measurement you can't explain is to publish it
+somewhere the people who can explain it will see it.
+
+What that thread does not cover, and what I still can't account for, is the
+other half of my report: why two models on this server refuse with a 400
+instead of truncating at all.
 
 #### Two checks that take one line each
 
@@ -347,6 +371,11 @@ claim, and reports REQUEST FAILED otherwise.
 Reported as [ollama/ollama#17889](https://github.com/ollama/ollama/issues/17889),
 alongside the existing reports of silent truncation going back to 2024 (#4967,
 #14259, #14262).
+
+The 2,050 was answered there within the hour by a pointer to
+[#17427](https://github.com/ollama/ollama/issues/17427), which had the formula
+already: `num_ctx / 2 + 2`. Credit to rick-github and spenceclark. The 400
+versus 200 split is still open.
 
 ## Data and further reading
 
