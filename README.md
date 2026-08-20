@@ -14,18 +14,33 @@ hand-written eval code.
 What I found when I actually checked:
 
 ```
-qwen3.context_length = 40960        model's own declared context length
-Modelfile parameters                no num_ctx
-                                    (repeat_penalty / stop / temperature /
-                                     top_k / top_p only)
-OLLAMA_CONTEXT_LENGTH               not set
-                                    (only OLLAMA_MODELS and OLLAMA_HOST)
-measured boundary                   prompt_eval_count 4,046-4,050 passes,
-                                    breaks above
+$ ollama show qwen3:14b
+    context length      40960          the model's own declared length
+
+$ ollama show --modelfile qwen3:14b | grep PARAMETER
+PARAMETER repeat_penalty 1            no num_ctx anywhere
+PARAMETER stop <|im_start|>
+PARAMETER stop <|im_end|>
+PARAMETER temperature 0.6
+PARAMETER top_k 20
+PARAMETER top_p 0.95
+
+OLLAMA_CONTEXT_LENGTH                 not set — checked in all three Windows
+                                      scopes; only OLLAMA_MODELS and
+                                      OLLAMA_HOST are set
 ```
 
-The model declares 40,960. It was being served roughly 4,096. Nothing in the
-model file and nothing in my environment asked for that.
+Then ask the running server what it actually gave the model. Load it with
+nothing specified and read the `CONTEXT` column:
+
+```
+$ ollama ps
+NAME         ID              SIZE      PROCESSOR    CONTEXT    UNTIL
+qwen3:14b    bdbd181c33f2    9.6 GB    100% GPU     4096       4 minutes from now
+```
+
+A stock model, pulled as-is, declaring 40,960, served 4,096. Nothing in the
+model file and nothing in my environment asked for it.
 
 The server states the number itself — but only when it refuses:
 
@@ -34,29 +49,40 @@ request (7851 tokens) exceeds the available context size (4096 tokens),
 try increasing it
 ```
 
-`"type": "exceed_context_size_error"`. That is the 4B rejecting a 44 KB prompt.
-Given the same prompt, the 14B says nothing at all. It returns 200.
+`"type": "exceed_context_size_error"`. That is one model refusing a 44 KB prompt
+and telling you exactly what is wrong. Another model, same server, same request,
+says nothing at all and returns 200.
 
-**Success is the failure mode.** Same request, same prompt, three models:
+**Success is the failure mode.** Same server, same prompt, no `num_ctx` on any
+of them. None of the four sets `num_ctx` in its Modelfile:
 
-| Model | HTTP | What came back |
-|---|---|---|
-| 4B | 400 | Rejected |
-| 9B\* | 400 | Rejected |
-| 14B | **200** | `prompt_eval_count` 2,050, wrong answer |
+| Model | How it got there | Declares | HTTP | What came back |
+|---|---|---|---|---|
+| `qwen3:4b` | `ollama pull` | 262,144 | **200** | `prompt_eval_count` 2,050, wrong answer |
+| `qwen3:14b` | `ollama pull` | 40,960 | **200** | `prompt_eval_count` 2,050, wrong answer |
+| a 4B I built | `ollama create` from a GGUF | 40,960 | 400 | Rejected, naming 4,096 |
+| a 9B I built | `ollama create` from a GGUF | 1,048,576 | 400 | Rejected, naming 4,096 |
 
-(Why 2,050 rather than 4,096, I don't know. I'm reporting the number I measured.
-It is reproducible: the check script below, on an unrelated prompt, lands on
-2,050 as well.)
+**It is not model size.** That was my first reading and it was wrong: a stock 4B
+and a stock 14B behave identically here, and two models I built locally reject
+instead. The declared context length doesn't predict it either — the model
+advertising 1,048,576 is one of the ones that refuses at 4,096.
 
-\* Nemotron Nano 9B v2 — a different model family, used here only as a second
-inference target. The 4B and 14B are Qwen3.
+The only axis I can see separating the two groups is pulled-from-the-registry
+versus built-locally, and I am reporting that as a correlation. I don't know the
+mechanism and I haven't read the source.
 
-The 14B returns HTTP 200. A successful response, correctly formed, containing a
-confident wrong answer. Nothing in the response says most of the prompt was
-discarded. If you test with the small models you conclude something is broken;
-if you test with the large one you conclude the model is weak. I did the latter,
-for weeks.
+(The window is 4,096 — `ollama ps` says so, and the models that refuse say so.
+So why does truncation leave 2,050, about half of it? I don't know. It is not a
+fluke: exactly 2,050 for two different stock models and for two prompts of
+different lengths and wording. I'm reporting the numbers I measured, both of
+them.)
+
+The 200 is the dangerous case. A successful response, correctly formed,
+containing a confident wrong answer, with nothing in it to say most of the
+prompt was discarded. If you happen to test with a model that refuses, you go
+looking for a configuration problem and you find one. If you test with a model
+that truncates, you conclude the model is weak. I did the latter, for weeks.
 
 **The truncation takes the front.** The tail of the prompt survives; the head
 does not. Your system prompt, formatting rules, few-shot examples, persona
@@ -96,16 +122,19 @@ under the 24 GiB threshold, so the 4k tier. Anyone on a 24GB or 48GB card never
 sees it. The people most likely to hit this are the ones least likely to be in
 the conversation about it.
 
-My own numbers are consistent with that reading:
+My card is consistent with the 4k tier:
 
 ```
 card             16,303 MiB = 15.92 GiB   -> below 24 GiB -> 4k tier
-measured boundary  prompt_eval_count 4,046-4,050 passes  -> consistent with 4,096
-model declares     qwen3.context_length = 40,960          -> served ~1/10
+server's refusal "available context size (4096 tokens)"  -> 4,096, stated
+model declares   qwen3.context_length = 40,960           -> a fraction served
 ```
 
-I'm reporting this as consistency, not as proof of mechanism. I haven't read the
-source.
+Consistency, not proof of mechanism — I haven't read the source. And it accounts
+for only one of the two numbers: the window is 4,096, but the models that
+truncate rather than refuse evaluate 2,050 of the prompt, about half of the
+window they were given. The VRAM tier explains the 4,096. It doesn't explain the
+2,050.
 
 The practical conclusion is the same either way: don't take the number from a
 page, read it off the running server.
@@ -124,8 +153,9 @@ expect to see 4096 there, and that alone tells you where you stand. (The
 context length page above uses this same command as its own verification step.)
 
 **`prompt_eval_count`** in the API response works on every build. It's the
-number of prompt tokens actually evaluated — not the number you sent. If you
-sent 10,000 tokens and it comes back near 4,096, you've found it.
+number of prompt tokens actually evaluated — not the number you sent. Send
+10,000 tokens; if a few thousand come back, you've found it. Don't expect it to
+equal the window: mine reports 4,096 in `ollama ps` and evaluates 2,050.
 
 #### Repro
 
