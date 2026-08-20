@@ -35,6 +35,8 @@ model file and nothing in my environment asked for that.
 | 9B\* | 400 | Rejected |
 | 14B | **200** | `prompt_eval_count` 2,050, wrong answer |
 
+(Why 2,050 rather than 4,096, I don't know. I'm reporting the number I measured.)
+
 \* Nemotron Nano 9B v2 — a different model family, used here only as a second
 inference target. The 4B and 14B are Qwen3.
 
