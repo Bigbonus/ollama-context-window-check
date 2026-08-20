@@ -137,6 +137,15 @@ Add `"num_ctx":16384` to `options` and it answers correctly.
 Put the needle on the **first** line, not the last. A needle at the end survives
 truncation, so the test passes while the bug is still there.
 
+## Check your own setup
+
+```bash
+./check_context.sh qwen3:14b
+```
+
+Sends the same needle prompt twice — once with the server default, once with an
+explicit `num_ctx` — and compares `prompt_eval_count`.
+
 #### Fixes, in increasing order of permanence
 
 ```bash
