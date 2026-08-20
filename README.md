@@ -298,6 +298,18 @@ would have been caught by one check.
   versions in every training record (learned by having 65 of 135 runs I can no
   longer attribute)
 
+## Postscript: the repro script had the same bug
+
+The first version of `check_context.sh` passed the haystack through argv.
+On Windows that hits the ~32KB command line limit, `jq` fails, and curl sends
+an empty body. Ollama returns 400 "missing request body" — and my script,
+seeing a 400, reported "REJECTED (prompt exceeded the served window)."
+
+A request that was never sent, reported as a context-window rejection. The
+instrument fabricated the phenomenon it was built to detect. It now checks
+that the error body actually mentions the context size before making that
+claim, and reports REQUEST FAILED otherwise.
+
 ---
 
 ## Data and further reading
