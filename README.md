@@ -56,21 +56,42 @@ says nothing at all and returns 200.
 **Success is the failure mode.** Same server, same prompt, no `num_ctx` on any
 of them. None of the four sets `num_ctx` in its Modelfile:
 
-| Model | How it got there | Declares | HTTP | What came back |
+| Model | Template | Declares | HTTP | What came back |
 |---|---|---|---|---|
-| `qwen3:4b` | `ollama pull` | 262,144 | **200** | `prompt_eval_count` 2,050, wrong answer |
-| `qwen3:14b` | `ollama pull` | 40,960 | **200** | `prompt_eval_count` 2,050, wrong answer |
-| a 4B I built | `ollama create` from a GGUF | 40,960 | 400 | Rejected, naming 4,096 |
-| a 9B I built | `ollama create` from a GGUF | 1,048,576 | 400 | Rejected, naming 4,096 |
+| `qwen3:4b` | Go (registry) | 262,144 | **200** | `prompt_eval_count` 2,050, wrong answer |
+| `qwen3:14b` | Go (registry) | 40,960 | **200** | `prompt_eval_count` 2,050, wrong answer |
+| a 4B I built | Jinja (from the GGUF) | 40,960 | 400 | Rejected, naming 4,096 |
+| a 9B I built | Jinja (from the GGUF) | 1,048,576 | 400 | Rejected, naming 4,096 |
 
 **It is not model size.** That was my first reading and it was wrong: a stock 4B
 and a stock 14B behave identically here, and two models I built locally reject
 instead. The declared context length doesn't predict it either — the model
-advertising 1,048,576 is one of the ones that refuses at 4,096.
+advertising 1,048,576 is one of the ones that refuses at 4,096. Nor is it
+`ollama create`: a derivative built from a Modelfile containing nothing but
+`FROM qwen3:14b` truncates exactly like its parent.
 
-The only axis I can see separating the two groups is pulled-from-the-registry
-versus built-locally, and I am reporting that as a correlation. I don't know the
-mechanism and I haven't read the source.
+**It is the chat template.** A maintainer asked what architecture the
+self-built models were, which sent me looking at what else differed. The 4B I
+built reports the same architecture, parameter count, embedding length and
+quantization as stock `qwen3:4b`. What differs is that a GGUF imported from
+elsewhere carries the upstream Jinja template, while models from the registry
+carry Ollama's own Go template. Swapping only the template, on the same
+weights:
+
+```
+self-built 4B, Jinja template from the GGUF   HTTP 400, exceed_context_size_error
+same weights + qwen3:4b's Go template         HTTP 200, prompt_eval_count 2050
+stock qwen3:4b, Go template                   HTTP 200, prompt_eval_count 2050
+```
+
+The Modelfile for the middle row is two lines: `FROM` the self-built model, and
+`TEMPLATE` set to the output of `ollama show --template qwen3:4b`. The
+unmodified model still returned 400 in the same session, so it isn't drift.
+
+Which of the two is preferable is a matter of taste — the 400 is at least
+honest — but **whether you get told depends on where your GGUF came from**, and
+nothing surfaces that. I'm reporting the measurement; I haven't read the source
+and don't know if the asymmetry is intended.
 
 (The window is 4,096 — `ollama ps` says so, and the models that refuse say so.
 So why does truncation leave 2,050, about half of it? **This has an answer, and
@@ -159,9 +180,11 @@ didn't know what to search for. That is the ordinary case, and it is why the
 first thing to do with a measurement you can't explain is to publish it
 somewhere the people who can explain it will see it.
 
-What that thread does not cover, and what I still can't account for, is the
-other half of my report: why two models on this server refuse with a 400
-instead of truncating at all.
+The other half of the report — why two models refuse with a 400 instead of
+truncating — was settled the same way, by a maintainer asking one question I
+hadn't thought to ask myself. It's the template, above. Both halves of this
+writeup were answered by other people within a few hours of publishing it, and
+neither would have been if I'd kept measuring on my own.
 
 #### Two checks that take one line each
 
@@ -375,7 +398,8 @@ alongside the existing reports of silent truncation going back to 2024 (#4967,
 The 2,050 was answered there within the hour by a pointer to
 [#17427](https://github.com/ollama/ollama/issues/17427), which had the formula
 already: `num_ctx / 2 + 2`. Credit to rick-github and spenceclark. The 400
-versus 200 split is still open.
+versus 200 split turned out to be the chat template; see above. Credit to
+rick-github for the question that found it.
 
 ## Data and further reading
 
