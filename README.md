@@ -342,6 +342,12 @@ claim, and reports REQUEST FAILED otherwise.
 
 ---
 
+## Upstream
+
+Reported as [ollama/ollama#17889](https://github.com/ollama/ollama/issues/17889),
+alongside the existing reports of silent truncation going back to 2024 (#4967,
+#14259, #14262).
+
 ## Data and further reading
 
 - Experiment data: https://doi.org/10.5281/zenodo.21983630
