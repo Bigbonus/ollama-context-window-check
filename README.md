@@ -2,7 +2,7 @@
 
 I've been running knowledge distillation experiments on consumer hardware: one
 RTX 5080 (16GB VRAM), 32GB of system RAM, an 850W supply, and Qwen3 at 1.7B,
-4B, [8B or 9B], and 14B, all QLoRA 4-bit.
+4B, 8B, and 14B, all QLoRA 4-bit.
 
 Two things I had written down as results were properties of my measurement
 setup. Both were silent. I'm writing them up because the first one is not
@@ -32,7 +32,7 @@ model file and nothing in my environment asked for that.
 | Model | HTTP | What came back |
 |---|---|---|
 | 4B | 400 | Rejected |
-| [8B or 9B] | 400 | Rejected |
+| 8B | 400 | Rejected |
 | 14B | **200** | `prompt_eval_count` 2,050, wrong answer |
 
 The 14B returns HTTP 200. A successful response, correctly formed, containing a
@@ -159,7 +159,7 @@ recorded runs:
 |---|---|---|---|
 | 1.7B | r13 / a26 | 3.29-3.30 GB | 3.72 GB |
 | 4B | r12-19 | 4.19-5.17 GB | 5.08-5.26 GB |
-| [8B or 9B] | r15-29 | 9.61-10.04 GB | 9.68-10.28 GB |
+| 8B | r15-29 | 9.61-10.04 GB | 9.68-10.28 GB |
 | 14B | r32 / a64 | 15.06-15.17 GB | **16.30-16.71 GB** |
 
 The card has 15.92 GiB usable. The 14B runs reserved more than that. They ran,
