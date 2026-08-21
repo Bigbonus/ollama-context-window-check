@@ -58,10 +58,10 @@ of them. None of the four sets `num_ctx` in its Modelfile:
 
 | Model | Template | Declares | HTTP | What came back |
 |---|---|---|---|---|
-| `qwen3:4b` | Go (registry) | 262,144 | **200** | `prompt_eval_count` 2,050, wrong answer |
-| `qwen3:14b` | Go (registry) | 40,960 | **200** | `prompt_eval_count` 2,050, wrong answer |
-| a 4B I built | Jinja (from the GGUF) | 40,960 | 400 | Rejected, naming 4,096 |
-| a 9B I built | Jinja (from the GGUF) | 1,048,576 | 400 | Rejected, naming 4,096 |
+| `qwen3:4b` | Go (no Jinja in the build) | 262,144 | **200** | `prompt_eval_count` 2,050, wrong answer |
+| `qwen3:14b` | Go (no Jinja in the build) | 40,960 | **200** | `prompt_eval_count` 2,050, wrong answer |
+| a 4B I built | Jinja (carried by the GGUF) | 40,960 | 400 | Rejected, naming 4,096 |
+| a 9B I built | Jinja (carried by the GGUF) | 1,048,576 | 400 | Rejected, naming 4,096 |
 
 **It is not model size.** That was my first reading and it was wrong: a stock 4B
 and a stock 14B behave identically here, and two models I built locally reject
@@ -73,10 +73,16 @@ advertising 1,048,576 is one of the ones that refuses at 4,096. Nor is it
 **It is the chat template.** A maintainer asked what architecture the
 self-built models were, which sent me looking at what else differed. The 4B I
 built reports the same architecture, parameter count, embedding length and
-quantization as stock `qwen3:4b`. What differs is that a GGUF imported from
-elsewhere carries the upstream Jinja template, while models from the registry
-carry Ollama's own Go template. Swapping only the template, on the same
-weights:
+quantization as stock `qwen3:4b`. What differs is which template path the
+server takes. A maintainer later corrected my description of this: **the Jinja
+template is the default, and the Go template is used only when there is no
+Jinja template, or when `OLLAMA_GO_TEMPLATE=1` is set.** So the split is not
+"registry ships Go" — it is that the GGUFs I imported *carry* a Jinja template
+and the registry builds do not, which is why the latter fall back to Go. On
+this machine `OLLAMA_GO_TEMPLATE` is unset, and `ollama show --template`
+reports Jinja for both self-built models and Go for both registry models.
+
+Swapping only the template, on the same weights:
 
 ```
 self-built 4B, Jinja template from the GGUF   HTTP 400, exceed_context_size_error
@@ -185,6 +191,21 @@ truncating — was settled the same way, by a maintainer asking one question I
 hadn't thought to ask myself. It's the template, above. Both halves of this
 writeup were answered by other people within a few hours of publishing it, and
 neither would have been if I'd kept measuring on my own.
+
+**One correction went the other way.** I reported that the pruning description
+in #17427 did not fit what I saw: my request is a two-message list — a ~7.8k
+token system message and a short user message — and under the described stage 1
+the system message should have been dropped, leaving `prompt_eval_count` in the
+tens. Observed was 2,050, with the answer quoting the tail of the system
+message. rick-github then corrected the description:
+
+> All of the messages between S and U3 are dropped and then S and U3 are
+> concatenated to form the final prompt. It's that prompt that is subsequently
+> truncated to 2050 tokens.
+
+So the system message is not dropped; it is concatenated with the last user
+message and the whole thing is then cut. That matches what the outputs showed.
+Two rounds of measurement, and the description of the mechanism moved.
 
 #### Two checks that take one line each
 
