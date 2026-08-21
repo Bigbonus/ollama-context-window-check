@@ -424,5 +424,34 @@ rick-github for the question that found it.
 
 ## Data and further reading
 
-- Experiment data: https://doi.org/10.5281/zenodo.21983630
-- I wrote up the full set of experiments, including the failures not covered here, as a book: [Raising Your Own AI on a Home PC](https://www.amazon.com/dp/B0HDPMNMTQ)
+- Experiment data for this writeup: https://doi.org/10.5281/zenodo.21983630
+- A log of what broke across the wider program — including the bug in the first
+  version of this repository's own script — kept in a fixed schema with a field
+  that cannot be reconstructed afterwards, *why it looked true*:
+  [llm-retraction-log](https://github.com/Bigbonus/llm-retraction-log)
+  ([10.5281/zenodo.22048923](https://doi.org/10.5281/zenodo.22048923))
+
+### The books
+
+Both come out of the machine described at the top of this page.
+
+**Raising Your Own AI on a Home PC** — the six months that produced these
+experiments. It opens with the morning an AI told me *"Actually, that isn't
+distillation."* I had spent half a year collecting 133 draft-and-correction
+pairs as experience points for a student model whose weights had been updated
+exactly zero times. The book keeps the wiring mistakes, the scoring mistakes
+and the failed predictions, including the run where the machine score improved
+while a blinded human comparison gave the trained side 0 wins, 9 losses and
+11 ties.
+[Kindle $9.99](https://www.amazon.com/dp/B0HCT93JX3) ·
+[Paperback $12.99](https://www.amazon.com/dp/B0HDPMNMTQ) ·
+data at [10.5281/zenodo.21730423](https://doi.org/10.5281/zenodo.21730423)
+
+**Applied AI Distillation: Make AI Yours** — five practical paths for adapting
+a model to your own use, starting from a no-training baseline, with runnable
+fixtures and known-answer tests.
+[Kindle $9.99](https://www.amazon.com/dp/B0HFJNDJV6) ·
+[Paperback $79.90](https://www.amazon.com/dp/B0HFKFZ5Q2)
+
+**The script above needs none of this.** It is one file, MIT, and it answers
+one question about your own server.
