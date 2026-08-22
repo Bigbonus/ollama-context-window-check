@@ -70,34 +70,60 @@ advertising 1,048,576 is one of the ones that refuses at 4,096. Nor is it
 `ollama create`: a derivative built from a Modelfile containing nothing but
 `FROM qwen3:14b` truncates exactly like its parent.
 
-**It is the chat template.** A maintainer asked what architecture the
-self-built models were, which sent me looking at what else differed. The 4B I
-built reports the same architecture, parameter count, embedding length and
-quantization as stock `qwen3:4b`. What differs is which template path the
-server takes. A maintainer later corrected my description of this: **the Jinja
-template is the default, and the Go template is used only when there is no
-Jinja template, or when `OLLAMA_GO_TEMPLATE=1` is set.** So the split is not
-"registry ships Go" — it is that the GGUFs I imported *carry* a Jinja template
-and the registry builds do not, which is why the latter fall back to Go. On
-this machine `OLLAMA_GO_TEMPLATE` is unset, and `ollama show --template`
-reports Jinja for both self-built models and Go for both registry models.
+**It is the chat template — and which one wins is a capability comparison.**
+A maintainer asked what architecture the self-built models were, which sent me
+looking at what else differed. The 4B I built reports the same architecture,
+parameter count, embedding length and quantization as stock `qwen3:4b`. What
+differs is which template path the server takes.
 
-Swapping only the template, on the same weights:
+I twice described that selection wrongly. The correct account, from
+rick-github on the upstream issue: template selection is **a heuristic that
+compares capabilities**, not a fixed "Jinja is the default". Where a model
+carries both, ollama picks whichever template is more capable. And the choice
+also decides *who does prompt pre-processing*:
+
+- **Go template chosen** — the ollama server pre-processes the prompt itself
+  and passes the processed prompt to `/completion` in the llama-server runner.
+  This is the path that silently truncates and returns 200.
+- **Jinja template chosen** — ollama does not understand Jinja, so the message
+  list is handed to `/v1/chat/completions` in llama-server, which **returns an
+  error for prompts exceeding the context buffer**. This is the 400.
+
+That single mechanism explains every row below, including one I had filed as
+unexplained.
+
+Same weights, only the template changed, all of it `ollama pull`-able:
 
 ```
-self-built 4B, Jinja template from the GGUF   HTTP 400, exceed_context_size_error
-same weights + qwen3:4b's Go template         HTTP 200, prompt_eval_count 2050
-stock qwen3:4b, Go template                   HTTP 200, prompt_eval_count 2050
+qwen3:4b                       Go, 1506 chars     200, prompt_eval_count 2050
+qwen3:14b                      Go, 1723 chars     200, prompt_eval_count 2050
+qwen3-vl:8b                    Go,   13 chars     200, prompt_eval_count 2050
+Nemotron-Nano-9B-v2 (hf.co)    Jinja, 4070 chars  400, exceed_context_size_error
 ```
 
-The Modelfile for the middle row is two lines: `FROM` the self-built model, and
-`TEMPLATE` set to the output of `ollama show --template qwen3:4b`. The
-unmodified model still returned 400 in the same session, so it isn't drift.
+And the two-line Modelfile that flips it, on a registry model:
 
-Which of the two is preferable is a matter of taste — the 400 is at least
-honest — but **whether you get told depends on where your GGUF came from**, and
-nothing surfaces that. I'm reporting the measurement; I haven't read the source
-and don't know if the asymmetry is intended.
+```
+FROM qwen3:4b
+TEMPLATE """{{ .Prompt }}"""
+```
+
+```
+qwen3:4b            Go, 1506 chars     200, prompt_eval_count 2050
+repro-4b-gotmpl     Jinja, 4049 chars  400
+```
+
+Asking for a bare Go pass-through gets you the **Jinja** path, because
+`{{ .Prompt }}` scores *below* the bundled Jinja template in the capability
+comparison. `ollama show --modelfile` still reports `TEMPLATE {{ .Prompt }}`
+while `/api/show` returns the 4049-character Jinja that actually ran. I had
+reported that as an anomaly I could not account for; it is the heuristic
+working as designed.
+
+Which of the two behaviours is preferable is a matter of taste — the 400 is at
+least honest — but **whether you get told depends on a capability comparison
+you did not make and cannot see**, and nothing surfaces the result. Thanks to
+rick-github for the explanation and for correcting me twice.
 
 (The window is 4,096 — `ollama ps` says so, and the models that refuse say so.
 So why does truncation leave 2,050, about half of it? **This has an answer, and
@@ -188,7 +214,11 @@ somewhere the people who can explain it will see it.
 
 The other half of the report — why two models refuse with a 400 instead of
 truncating — was settled the same way, by a maintainer asking one question I
-hadn't thought to ask myself. It's the template, above. Both halves of this
+hadn't thought to ask myself. It's the template, above — and I got the
+mechanism wrong twice before the maintainer's third explanation landed it.
+First I called it model size, then I called it "Jinja is the default"; it is
+actually a capability comparison between the two templates, which also decides
+whether ollama or llama-server handles the overflow. Both halves of this
 writeup were answered by other people within a few hours of publishing it, and
 neither would have been if I'd kept measuring on my own.
 
